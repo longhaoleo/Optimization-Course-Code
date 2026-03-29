@@ -1,11 +1,11 @@
 # Optimization Course Practice
 
-这个仓库用于最优化课程代码实践，目标是：
+课程代码按“可复用模块 + 作业调用脚本”组织：
 
-- 核心算法放在 `optimization` 下，便于复用
-- 每次作业在 `workX` 下写调用和实验，不重复实现算法
+- `optimization/`：算法模块（可复用）
+- `work1/`、`work2/`：作业脚本与作业文件（调用模块）
 
-## 目录结构
+## 当前结构
 
 ```text
 .
@@ -19,35 +19,49 @@
 │  │  └─ wolfe_powell.py
 │  └─ optimizers/
 │     ├─ __init__.py
-│     └─ steepest_descent.py
+│     ├─ steepest_descent.py
+│     ├─ newton.py
+│     └─ modified_newton.py
 ├─ work1/
 │  ├─ __init__.py
 │  └─ work1.py
-└─ README.md
+└─ work2/
+   ├─ __init__.py
+   ├─ work2.py
+   ├─ newton.py          # 兼容入口，转调 work2.py
+   └─ a9a_train.csv
 ```
 
 ## 模块说明
 
-- `optimization/core.py`  
-  定义 `Objective`，统一封装目标函数、梯度和可选 Hessian。
+- `optimization/core.py`
+  - `Objective`：统一封装 `func/grad/hess`
 
-- `optimization/line_search/`  
-  线搜索方法，每个方法一个文件：
+- `optimization/line_search/`
   - `golden_ratio_line_search`
   - `armijo_line_search`
   - `wolfe_powell_line_search`
 
-- `optimization/optimizers/steepest_descent.py`  
-  最速下降法实现，返回 tuple：
-  `(x_opt, f_opt, iters, converged, grad_norm)`
-
-- `work1/work1.py`  
-  作业入口脚本，定义本次目标函数并调用 `optimization` 中的方法做实验。
+- `optimization/optimizers/`
+  - `steepest_descent`
+  - `newton_method`
+  - `modified_newton_method`
+  - 返回统一为：
+    `(x_opt, f_opt, iters, converged, grad_norm)`
 
 ## 运行方式
 
-在仓库根目录执行：
+### work1
 
 ```bash
 python -m work1.work1
 ```
+
+### work2（生成实验素材）
+
+```bash
+python -m work2.work2
+```
+
+说明：不使用命令行参数，是否运行 Rastrigin / a9a 逻辑回归由 `work2/work2.py` 顶部开关控制：
+`RUN_RASTRIGIN`、`RUN_LOGISTIC`、`A9A_PATH`。
