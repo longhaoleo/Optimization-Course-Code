@@ -1,9 +1,9 @@
 # Optimization Course Practice
 
-课程代码按“可复用模块 + 作业调用脚本”组织：
+最优化课程代码按**可复用模块——optimizition** 和 **作业脚本_work\***组织：
 
-- `optimization/`：算法模块（可复用）
-- `work1/`、`work2/`：作业脚本与作业文件（调用模块）
+- `optimization/`：算法模块
+- `work1/`、`work2/`：各次作业的调用代码、数据与报告文件
 
 ## 当前结构
 
@@ -28,7 +28,6 @@
 └─ work2/
    ├─ __init__.py
    ├─ work2.py
-   ├─ newton.py          # 兼容入口，转调 work2.py
    └─ a9a_train.csv
 ```
 
@@ -54,14 +53,17 @@
 ### work1
 
 ```bash
-python -m work1.work1
+python work1/work1.py
 ```
 
-### work2（生成实验素材）
+### work2
 
 ```bash
-python -m work2.work2
+python work2/work2.py
 ```
 
-说明：不使用命令行参数，是否运行 Rastrigin / a9a 逻辑回归由 `work2/work2.py` 顶部开关控制：
-`RUN_RASTRIGIN`、`RUN_LOGISTIC`、`A9A_PATH`。
+运行 `work2` 后会：
+
+- 在终端输出各实验结果
+- 在 `work2/picture/` 下生成函数图和收敛曲线
+- 供 `work2/work2.tex` 直接引用生成实验报告
