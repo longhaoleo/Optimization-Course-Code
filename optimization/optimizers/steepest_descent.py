@@ -30,6 +30,9 @@ def steepest_descent(
     xk = np.asarray(x0, dtype=float)
     # 是否满足停止条件的标志位。
     converged = False
+    # 记录上一步迭代状态，供 BB 等“历史信息型”步长搜索使用。
+    x_prev: Optional[np.ndarray] = None
+    g_prev: Optional[np.ndarray] = None
 
     # 外层主循环：每次迭代更新一次 xk。
     for iteration in range(max_outer_iter):
@@ -44,10 +47,22 @@ def steepest_descent(
 
         # 4) 最速下降方向：dk = -gk。
         dk = -gk
-        # 5) 线搜索决定本轮步长 alpha。
-        alpha, _ = line_search_func(xk, dk, objective, **ls_params)
+        # 5) 步长搜索决定本轮步长 alpha。
+        alpha, _ = line_search_func(
+            xk,
+            dk,
+            objective,
+            x_prev=x_prev,
+            g_prev=g_prev,
+            gk=gk,
+            iteration=iteration,
+            **ls_params,
+        )
+        x_old = xk.copy()
         # 6) 位置更新：x_{k+1} = x_k + alpha * d_k。
         xk = xk + alpha * dk
+        x_prev = x_old
+        g_prev = gk.copy()
 
         # 7) 若用户提供回调钩子，则把本轮信息回传给上层调用。
         if callback is not None:
@@ -60,7 +75,7 @@ def steepest_descent(
                 objective.value(xk),
                 # 当前梯度范数。
                 grad_norm,
-                # 当前线搜索步长。
+                # 当前步长搜索得到的步长。
                 alpha,
             )
     else:

@@ -136,6 +136,9 @@ def modified_newton_method(
     xk = np.asarray(x0, dtype=float)
     # 收敛标记。
     converged = False
+    # 记录上一步信息，兼容需要历史量的步长策略（如 BB）。
+    x_prev: Optional[np.ndarray] = None
+    g_prev: Optional[np.ndarray] = None
 
     # 外层主循环。
     for iteration in range(max_outer_iter):
@@ -156,9 +159,21 @@ def modified_newton_method(
             dk = -gk
 
         # 4) 线搜索统一由外部注入，和最速下降/牛顿法保持同一接口。
-        alpha, _ = line_search_func(xk, dk, objective, **ls_params)
+        alpha, _ = line_search_func(
+            xk,
+            dk,
+            objective,
+            x_prev=x_prev,
+            g_prev=g_prev,
+            gk=gk,
+            iteration=iteration,
+            **ls_params,
+        )
+        x_old = xk.copy()
         # 5) 更新迭代点。
         xk = xk + alpha * dk
+        x_prev = x_old
+        g_prev = gk.copy()
 
         # 6) 向外暴露迭代过程（可选）。
         if callback is not None:

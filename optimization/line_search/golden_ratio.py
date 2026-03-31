@@ -15,16 +15,16 @@ def golden_ratio_line_search(
     bk: float = 2.0,
     tol: float = 1e-5,
     max_iter: int = 10_000,
+    **_: object,
 ) -> Tuple[float, int]:
     """
-    黄金分割精确线搜索。
+    黄金分割精确步长搜索。
 
     多维问题在给定方向 dk 上转化为一维问题：
         phi(alpha) = f(xk + alpha * dk)
     然后在区间 [ak, bk] 内近似求解 argmin phi(alpha)。
     """
 
-    # 区间与精度参数基本合法性。
     assert ak < bk, "ak must satisfy ak < bk."
     assert tol > 0, "tol must be positive."
 

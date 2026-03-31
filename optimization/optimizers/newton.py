@@ -44,6 +44,9 @@ def newton_method(
     xk = np.asarray(x0, dtype=float)
     # 收敛标记。
     converged = False
+    # 记录上一步信息，兼容需要历史量的步长策略（如 BB）。
+    x_prev: Optional[np.ndarray] = None
+    g_prev: Optional[np.ndarray] = None
 
     # 外层迭代：每轮基于当前点构造二阶局部模型。
     for iteration in range(max_outer_iter):
@@ -62,10 +65,22 @@ def newton_method(
         if float(np.dot(gk, dk)) >= 0.0:
             dk = -gk
 
-        # 4) 用外部指定的线搜索方法确定步长。
-        alpha, _ = line_search_func(xk, dk, objective, **ls_params)
+        # 4) 用外部指定的步长搜索方法确定步长。
+        alpha, _ = line_search_func(
+            xk,
+            dk,
+            objective,
+            x_prev=x_prev,
+            g_prev=g_prev,
+            gk=gk,
+            iteration=iteration,
+            **ls_params,
+        )
+        x_old = xk.copy()
         # 5) 位置更新。
         xk = xk + alpha * dk
+        x_prev = x_old
+        g_prev = gk.copy()
 
         # 6) 回调给上层记录实验轨迹（可选）。
         if callback is not None:

@@ -4,67 +4,116 @@ from typing import Callable, Optional, Tuple
 
 import numpy as np
 
-from optimization.line_search import wolfe_powell_line_search
-
 from ..core import Objective
+from ..line_search import wolfe_powell_line_search
 
-def update_bk(
+LineSearch = Callable[..., Tuple[float, int]]
+IterationCallback = Callable[[int, np.ndarray, float, float, float], None]
+
+
+def _solve_bfgs_direction(bk: np.ndarray, gk: np.ndarray) -> np.ndarray:
+    """求解 Bk * d = -gk，若数值不稳定则回退到伪逆。"""
+
+    n = bk.shape[0]
+    if np.linalg.matrix_rank(bk) == n:
+        return -np.linalg.solve(bk, gk)
+    return -(np.linalg.pinv(bk) @ gk)
+
+
+def _bfgs_update(
     bk: np.ndarray,
-    xk_next: np.ndarray,
-    xk: np.ndarray,
-    objective: Objective
+    sk: np.ndarray,
+    yk: np.ndarray,
+    eps: float = 1e-12,
 ) -> np.ndarray:
-    """更新 B_k 矩阵，使用 BFGS 更新公式。
-    BFGS 更新公式如下：
-    B_{k+1} = B_k - (B_k @ s_k @ s_k^T @ B_k) / (s_k^T @ B_k @ s_k) + (y_k @ y_k^T) / (y_k^T @ s_k)
-    其中 s_k = x_{k+1} - x_k，y_k = grad f(x_{k+1}) - grad f(x_k)。
-    """
-    sk = xk_next - xk
-    yk = objective.gradient(xk_next) - objective.gradient(xk)
+    """执行一次 BFGS 更新，必要时跳过退化更新。"""
 
-    bk_next = bk - bk @ sk @ sk.T @ bk / (sk.T @ bk @ sk) + yk @ yk.T / (yk.T @ sk)
+    yTs = float(np.dot(yk, sk))
+    if yTs <= eps:
+        # 曲率条件过弱时不更新，避免把近似 Hessian 修坏。
+        return bk
 
-    return bk_next
+    bks = bk @ sk
+    sTbs = float(np.dot(sk, bks))
+    if sTbs <= eps:
+        # 分母过小意味着当前 Bk 在 sk 方向上数值不稳定。
+        return bk
+
+    # BFGS 公式：
+    #   B_{k+1} = B_k - (B_k s_k s_k^T B_k)/(s_k^T B_k s_k) + (y_k y_k^T)/(y_k^T s_k)
+    term1 = np.outer(bks, bks) / sTbs
+    term2 = np.outer(yk, yk) / yTs
+    bk_next = bk - term1 + term2
+
+    # 数值上保持对称。
+    return 0.5 * (bk_next + bk_next.T)
+
 
 def bfgc(
     x0: np.ndarray,
     objective: Objective,
-    max_iter: int = 1000,
+    line_search_func: LineSearch = wolfe_powell_line_search,
     grad_tol: float = 1e-6,
-    tol: float = 1e-6
-) -> np.ndarray:
+    max_outer_iter: int = 1000,
+    callback: Optional[IterationCallback] = None,
+    **ls_params,
+) -> Tuple[np.ndarray, float, int, bool, float]:
     """
-    
+    BFGS 拟牛顿法。
+
+    这里用 B_k 近似 Hessian，并在每轮解
+        B_k d_k = -g_k
+    得到搜索方向，再用 BFGS 公式更新 B_k。
+
+    返回值：
+        (x_opt, f_opt, iters, converged, grad_norm)
     """
 
+    xk = np.asarray(x0, dtype=float)
+    n = xk.size
+    bk = np.eye(n, dtype=float)
+    gk = objective.gradient(xk)
     converged = False
-    xk = x0
 
-    for iteration in range(max_iter):
-        gk = objective.gradient(xk_next)
-        grad_norm = np.linalg.norm(gk)
 
-        if grad_norm < grad_tol: 
+    for iteration in range(max_outer_iter):
+        grad_norm = float(np.linalg.norm(gk))
+        if grad_norm < grad_tol:
             converged = True
             break
-        
-        # 确定方向
-        dk = np.solve(bk, -objective.gradient(xk))
 
-        # 线搜索
-        alpha, _ = wolfe_powell_line_search(
-            xk, dk, objective, max_iter=10_000)
+        # 先由当前近似 Hessian Bk 求方向。
+        dk = _solve_bfgs_direction(bk, gk)
+        if float(np.dot(gk, dk)) >= 0.0:
+            # 若求出的方向不是下降方向，则退回最速下降方向。
+            dk = -gk
 
-        # 更新位置
-        xk_next = xk + alpha * dk
-        if np.linalg.norm(xk_next - xk) < grad_tol:
-            converged = True
-            break
-        else:
-            bk = update_bk(bk, xk_next, xk, objective)
-            xk = xk_next
-    
-    # 返回统一五元组。
+        # 再在该方向上做步长搜索，得到 alpha_k。
+        alpha, _ = line_search_func(xk, dk, objective, **ls_params)
+
+        x_next = xk + alpha * dk
+        g_next = objective.gradient(x_next)
+
+        # s_k 表示位移，y_k 表示梯度变化量。
+        sk = x_next - xk
+        yk = g_next - gk
+        bk = _bfgs_update(bk, sk, yk)
+
+        if callback is not None:
+            callback(
+                iteration + 1,
+                x_next.copy(),
+                objective.value(x_next),
+                grad_norm,
+                float(alpha),
+            )
+
+        xk = x_next
+        gk = g_next
+    else:
+        iteration = max_outer_iter
+        grad_norm = float(np.linalg.norm(gk))
+
     return (
         xk,
         objective.value(xk),
