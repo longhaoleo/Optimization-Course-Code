@@ -1,0 +1,4 @@
+method,iters,f_opt,converged,grad_norm
+Steepest+BB,64,1.22659468e-16,True,1.60528845e-08
+BFGC+Armijo(Powell),29,3.25995000e-10,True,7.34763822e-07
+FR+Armijo(Powell),115,4.72998252e-12,True,6.50849285e-07

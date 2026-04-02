@@ -7,7 +7,7 @@ from .line_search import (
 )
 from .optimizers import (
     bfgc,
-    cg,
+    fr,
     modified_newton_method,
     newton_method,
     steepest_descent,
@@ -18,7 +18,7 @@ __all__ = [
     "armijo_line_search",
     "bb_step_search",
     "bfgc",
-    "cg",
+    "fr",
     "golden_ratio_line_search",
     "modified_newton_method",
     "newton_method",

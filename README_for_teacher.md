@@ -6,7 +6,7 @@
 
 - 也可以上仓库地址：`https://github.com/longhaoleo/Optimization-Course-Code#` 下载zip查看源码。
 
-附件是本次作业项目代码，下载解压后，终端执行`python work2/work2.py`亦可查看。
+附件是本次作业项目代码，下载解压后，终端执行`python work3.py`亦可查看。
 
 
 

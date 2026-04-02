@@ -11,7 +11,7 @@ LineSearch = Callable[..., Tuple[float, int]]
 IterationCallback = Callable[[int, np.ndarray, float, float, float], None]
 
 
-def cg(
+def fr(
     x0: np.ndarray,
     objective: Objective,
     line_search_func: LineSearch = wolfe_powell_line_search,
