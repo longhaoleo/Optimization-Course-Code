@@ -115,7 +115,7 @@ def _solve_from_ldlt(l: np.ndarray, d: np.ndarray, b: np.ndarray) -> np.ndarray:
     return x
 
 
-def modified_newton_method(
+def modified_newton(
     x0: np.ndarray,
     objective: Objective,
     line_search_func: LineSearch,
@@ -175,7 +175,7 @@ def modified_newton_method(
         x_prev = x_old
         g_prev = gk.copy()
 
-        # 6) 向外暴露迭代过程（可选）。
+        # 6) 向外暴露迭代过程。
         if callback is not None:
             callback(
                 iteration + 1,

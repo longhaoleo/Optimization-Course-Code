@@ -47,7 +47,7 @@
 - `optimization/optimizers/`
   - `steepest_descent`
   - `newton_method`
-  - `modified_newton_method`
+  - `modified_newton`
   - 返回统一为：
     `(x_opt, f_opt, iters, converged, grad_norm)`
 

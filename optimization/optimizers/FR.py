@@ -22,7 +22,7 @@ def fr(
 ) -> Tuple[np.ndarray, float, int, bool, float]:
     """
     非线性共轭梯度法（Fletcher-Reeves）。
-
+    属于 CG 方法
     每一轮先沿当前共轭方向做步长搜索，再用
         beta_k = (g_{k+1}^T g_{k+1}) / (g_k^T g_k)
     更新下一轮搜索方向。

@@ -1,14 +1,16 @@
-from .BFGC import bfgc
+from .BFGS import bfgs
 from .FR import fr
-from .modified_newton import modified_newton_method
+from .modified_newton import modified_newton
 from .newton import newton_method
+from .newton_CG import newton_CG
 from .steepest_descent import steepest_descent
 
 
 __all__ = [
-    "bfgc",
+    "bfgs",
     "fr",
-    "modified_newton_method",
+    "modified_newton",
     "newton_method",
+    "newton_CG",
     "steepest_descent",
 ]

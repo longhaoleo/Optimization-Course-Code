@@ -49,7 +49,7 @@ def _bfgs_update(
     return 0.5 * (bk_next + bk_next.T)
 
 
-def bfgc(
+def bfgs(
     x0: np.ndarray,
     objective: Objective,
     line_search_func: LineSearch = wolfe_powell_line_search,

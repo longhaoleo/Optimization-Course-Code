@@ -15,21 +15,16 @@ from optimization import (
     Objective,
     armijo_line_search,
     bb_step_search,
-    bfgc,
+    bfgs,
     fr,
     steepest_descent,
 )
+from optimization.utils import ensure_dir, plot_convergence_curves, run_with_trace, save_csv
 
 Result = Tuple[np.ndarray, float, int, bool, float]
 Optimizer = Callable[..., Result]
 LineSearch = Callable[..., Tuple[float, int]]
-
-
-def _picture_dir() -> Path:
-    picture_dir = _PROJECT_ROOT / "work3" / "picture"
-    picture_dir.mkdir(parents=True, exist_ok=True)
-    return picture_dir
-
+PICTURE_DIR = ensure_dir(_PROJECT_ROOT, "work3", "picture")
 
 def rosenbrock_objective() -> Objective:
     def func(x: np.ndarray) -> float:
@@ -77,34 +72,6 @@ def powell_singular_objective() -> Objective:
     return Objective(func=func, grad=grad, name="powell_singular")
 
 
-def run_with_trace(
-    optimizer: Optimizer,
-    x0: np.ndarray,
-    objective: Objective,
-    line_search: LineSearch,
-    optimizer_params: Dict | None = None,
-    line_search_params: Dict | None = None,
-) -> Tuple[Result, List[np.ndarray], List[float], List[float]]:
-    x0 = np.asarray(x0, dtype=float)
-    x_trace = [x0.copy()]
-    f_trace = [objective.value(x0)]
-    alpha_trace: List[float] = []
-
-    def callback(_: int, x: np.ndarray, fx: float, __: float, alpha: float) -> None:
-        x_trace.append(np.asarray(x, dtype=float).copy())
-        f_trace.append(float(fx))
-        alpha_trace.append(float(alpha))
-
-    kwargs: Dict = {"callback": callback}
-    if optimizer_params is not None:
-        kwargs.update(optimizer_params)
-    if line_search_params is not None:
-        kwargs.update(line_search_params)
-
-    result = optimizer(x0, objective, line_search, **kwargs)
-    return result, x_trace, f_trace, alpha_trace
-
-
 def _plot_rosenbrock_bb_contour(x_trace: List[np.ndarray], save_path: Path) -> None:
     x1 = np.linspace(-2.0, 2.0, 400)
     x2 = np.linspace(-1.0, 3.0, 400)
@@ -131,57 +98,39 @@ def _plot_rosenbrock_bb_contour(x_trace: List[np.ndarray], save_path: Path) -> N
     plt.close(fig)
 
 
-def _plot_convergence_curves(histories: Dict[str, List[float]], title: str, save_path: Path) -> None:
-    fig, ax = plt.subplots(figsize=(6.2, 4.2))
-    for name, values in histories.items():
-        y = np.maximum(np.asarray(values, dtype=float), 1e-16)
-        ax.semilogy(np.arange(y.size), y, label=name)
-    ax.set_xlabel("Iteration")
-    ax.set_ylabel("Objective value")
-    ax.set_title(title)
-    ax.grid(True, which="both", linestyle="--", alpha=0.35)
-    ax.legend()
-    fig.tight_layout()
-    fig.savefig(save_path, dpi=220)
-    plt.close(fig)
-
-
 def _write_summary(
     summary_path: Path,
     rosen_result: Result,
-    powell_bfgc_result: Result,
+    powell_bfgs_result: Result,
     powell_fr_result: Result,
 ) -> None:
-    lines = [
-        "method,iters,f_opt,converged,grad_norm",
-        (
-            "Steepest+BB,"
-            f"{rosen_result[2]},"
-            f"{rosen_result[1]:.8e},"
-            f"{rosen_result[3]},"
-            f"{rosen_result[4]:.8e}"
-        ),
-        (
-            "BFGC+Armijo(Powell),"
-            f"{powell_bfgc_result[2]},"
-            f"{powell_bfgc_result[1]:.8e},"
-            f"{powell_bfgc_result[3]},"
-            f"{powell_bfgc_result[4]:.8e}"
-        ),
-        (
-            "FR+Armijo(Powell),"
-            f"{powell_fr_result[2]},"
-            f"{powell_fr_result[1]:.8e},"
-            f"{powell_fr_result[3]},"
-            f"{powell_fr_result[4]:.8e}"
-        ),
+    rows = [
+        {
+            "method": "Steepest+BB",
+            "iters": rosen_result[2],
+            "f_opt": f"{rosen_result[1]:.8e}",
+            "converged": rosen_result[3],
+            "grad_norm": f"{rosen_result[4]:.8e}",
+        },
+        {
+            "method": "bfgs+Armijo(Powell)",
+            "iters": powell_bfgs_result[2],
+            "f_opt": f"{powell_bfgs_result[1]:.8e}",
+            "converged": powell_bfgs_result[3],
+            "grad_norm": f"{powell_bfgs_result[4]:.8e}",
+        },
+        {
+            "method": "FR+Armijo(Powell)",
+            "iters": powell_fr_result[2],
+            "f_opt": f"{powell_fr_result[1]:.8e}",
+            "converged": powell_fr_result[3],
+            "grad_norm": f"{powell_fr_result[4]:.8e}",
+        },
     ]
-    summary_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    save_csv(summary_path, rows)
 
 
 def main() -> None:
-    picture_dir = _picture_dir()
-
     # 实验 1：BB 步长最速下降法求解 Rosenbrock。
     rosen = rosenbrock_objective()
     x0_rosen = np.array([-1.2, 1.0], dtype=float)
@@ -191,29 +140,27 @@ def main() -> None:
         objective=rosen,
         line_search=bb_step_search,
         optimizer_params={"max_outer_iter": 20_000, "grad_tol": 1e-6},
-        line_search_params={"alpha_init": 0.1, "variant": "auto"},
+        store_x_trace=True,
     )
 
-    _plot_rosenbrock_bb_contour(rosen_x_trace, picture_dir / "work3_rosenbrock_bb_contour.png")
-    _plot_convergence_curves(
+    _plot_rosenbrock_bb_contour(rosen_x_trace, PICTURE_DIR / "work3_rosenbrock_bb_contour.png")
+    plot_convergence_curves(
         {"Steepest + BB": rosen_f_trace},
         "Rosenbrock convergence with BB step size",
-        picture_dir / "work3_rosenbrock_bb_curve.png",
+        PICTURE_DIR / "work3_rosenbrock_bb_curve.png",
     )
 
-    # 实验 2：Armijo 线搜索下，比较 BFGC 与 FR 在 Powell 奇异函数上的表现。
+    # 实验 2：Armijo 线搜索下，比较 bfgs 与 FR 在 Powell 奇异函数上的表现。
     powell = powell_singular_objective()
     x0_powell = np.array([3.0, -1.0, 0.0, 1.0], dtype=float)
     optimizer_params = {"max_outer_iter": 20_000, "grad_tol": 1e-6}
-    armijo_params = {"alpha": 1.0, "sigma1": 1e-4, "rho": 0.5}
 
-    powell_bfgc_result, _, powell_bfgc_f_trace, _ = run_with_trace(
-        optimizer=bfgc,
+    powell_bfgs_result, _, powell_bfgs_f_trace, _ = run_with_trace(
+        optimizer=bfgs,
         x0=x0_powell,
         objective=powell,
         line_search=armijo_line_search,
         optimizer_params=optimizer_params,
-        line_search_params=armijo_params,
     )
     powell_fr_result, _, powell_fr_f_trace, _ = run_with_trace(
         optimizer=fr,
@@ -221,37 +168,36 @@ def main() -> None:
         objective=powell,
         line_search=armijo_line_search,
         optimizer_params=optimizer_params,
-        line_search_params=armijo_params,
     )
 
-    _plot_convergence_curves(
+    plot_convergence_curves(
         {
-            "BFGC + Armijo": powell_bfgc_f_trace,
+            "bfgs + Armijo": powell_bfgs_f_trace,
             "FR + Armijo": powell_fr_f_trace,
         },
         "Powell singular function convergence",
-        picture_dir / "work3_powell_armijo_curve.png",
+        PICTURE_DIR / "work3_powell_armijo_curve.png",
     )
 
     _write_summary(
         _PROJECT_ROOT / "work3" / "work3_summary.csv",
         rosen_result,
-        powell_bfgc_result,
+        powell_bfgs_result,
         powell_fr_result,
     )
 
     print("Experiment 1: Steepest + BB on Rosenbrock")
     print(
-        f"  iters={rosen_result[2]}, f*={rosen_result[1]:.4e}, "
+        f"iters={rosen_result[2]}, f*={rosen_result[1]:.4e}, "
         f"converged={rosen_result[3]}, grad_norm={rosen_result[4]:.3e}"
     )
-    print("Experiment 2: Armijo + {BFGC, FR} on Powell singular function")
+    print("Experiment 2: Armijo + {bfgs, FR} on Powell singular function")
     print(
-        f"  BFGC: iters={powell_bfgc_result[2]}, f*={powell_bfgc_result[1]:.4e}, "
-        f"converged={powell_bfgc_result[3]}, grad_norm={powell_bfgc_result[4]:.3e}"
+        f"bfgs: iters={powell_bfgs_result[2]}, f*={powell_bfgs_result[1]:.4e}, "
+        f"converged={powell_bfgs_result[3]}, grad_norm={powell_bfgs_result[4]:.3e}"
     )
     print(
-        f"  FR: iters={powell_fr_result[2]}, f*={powell_fr_result[1]:.4e}, "
+        f"FR: iters={powell_fr_result[2]}, f*={powell_fr_result[1]:.4e}, "
         f"converged={powell_fr_result[3]}, grad_norm={powell_fr_result[4]:.3e}"
     )
 

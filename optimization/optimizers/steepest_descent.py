@@ -64,7 +64,7 @@ def steepest_descent(
         x_prev = x_old
         g_prev = gk.copy()
 
-        # 7) 若用户提供回调钩子，则把本轮信息回传给上层调用。
+        # 7) 若提供回调钩子，则把本轮信息回传给上层调用。
         if callback is not None:
             callback(
                 # 迭代编号使用 1-based，更符合报告展示习惯。
@@ -79,9 +79,7 @@ def steepest_descent(
                 alpha,
             )
     else:
-        # for-else: 仅当循环未break时进入，表示达到最大迭代次数。
         iteration = max_outer_iter
-        # 退出前再计算一次梯度范数，保证返回值与最终 xk 对齐。
         grad_norm = float(np.linalg.norm(objective.gradient(xk)))
 
     # 返回统一五元组，便于与牛顿法/修正牛顿法对齐比较。

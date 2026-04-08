@@ -82,7 +82,7 @@ def newton_method(
         x_prev = x_old
         g_prev = gk.copy()
 
-        # 6) 回调给上层记录实验轨迹（可选）。
+        # 6) 回调给上层记录实验轨迹。
         if callback is not None:
             callback(
                 iteration + 1,

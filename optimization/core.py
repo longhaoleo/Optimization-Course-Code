@@ -9,6 +9,7 @@ Array = np.ndarray
 ObjectiveFunction = Callable[[Array], float]
 GradientFunction = Callable[[Array], Array]
 HessianFunction = Callable[[Array], Array]
+HessianVectorFunction = Callable[[Array, Array], Array]
 
 
 @dataclass(frozen=True)
@@ -19,6 +20,7 @@ class Objective:
     grad: GradientFunction
     name: str = "objective"
     hess: Optional[HessianFunction] = None
+    hess_vec: Optional[HessianVectorFunction] = None
 
     def value(self, x: Array) -> float:
         """计算函数值。"""
@@ -38,3 +40,11 @@ class Objective:
             raise ValueError("Hessian is not provided for this objective.")
         x = np.asarray(x, dtype=float)
         return np.asarray(self.hess(x), dtype=float)
+
+    def hessian_vector_product(self, x: Array, v: Array) -> Array:
+        """计算 Hessian 与向量的乘积。"""
+        x = np.asarray(x, dtype=float)
+        v = np.asarray(v, dtype=float)
+        if self.hess_vec is not None:
+            return np.asarray(self.hess_vec(x, v), dtype=float)
+        return self.hessian(x) @ v

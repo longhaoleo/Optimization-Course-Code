@@ -19,11 +19,12 @@ from optimization import (
     Objective,
     armijo_line_search,
     golden_ratio_line_search,
-    modified_newton_method,
+    modified_newton,
     newton_method,
     steepest_descent,
     wolfe_powell_line_search,
 )
+from optimization.utils import ensure_dir, plot_convergence_curves, run_with_trace
 
 # 统一结果格式：
 # (x_opt, f_opt, iters, converged, grad_norm)
@@ -31,15 +32,7 @@ Result = Tuple[np.ndarray, float, int, bool, float]
 Optimizer = Callable[..., Result]
 # LineSearch 约定：输入 (xk, dk, objective, **params)，输出 (alpha, line_search_iters)
 LineSearch = Callable[..., Tuple[float, int]]
-
-
-def _picture_dir() -> Path:
-    """图片统一输出到 work2/picture。"""
-
-    picture_dir = _PROJECT_ROOT / "work2" / "picture"
-    picture_dir.mkdir(parents=True, exist_ok=True)
-    return picture_dir
-
+PICTURE_DIR = ensure_dir(_PROJECT_ROOT, "work2", "picture")
 
 def rosenbrock_objective() -> Objective:
     """
@@ -169,7 +162,7 @@ def plot_rosenbrock_landscape() -> None:
     ax.legend()
     ax.grid(True, linestyle="--", alpha=0.3)
     fig.tight_layout()
-    fig.savefig(_picture_dir() / "rosenbrock_contour.png", dpi=200)
+    fig.savefig(PICTURE_DIR / "rosenbrock_contour.png", dpi=200)
     plt.close(fig)
 
 
@@ -192,55 +185,8 @@ def plot_rastrigin_landscape() -> None:
     ax.set_title("Rastrigin contour (2D view)")
     ax.grid(True, linestyle="--", alpha=0.15)
     fig.tight_layout()
-    fig.savefig(_picture_dir() / "rastrigin_contour.png", dpi=200)
+    fig.savefig(PICTURE_DIR / "rastrigin_contour.png", dpi=200)
     plt.close(fig)
-
-
-def run_with_trace(
-    optimizer: Optimizer,
-    x0: np.ndarray,
-    objective: Objective,
-    line_search: LineSearch,
-    **kwargs,
-) -> Tuple[Result, List[float], List[float]]:
-    """
-    通用执行器：
-    1. 运行优化算法
-    2. 记录每轮目标函数值
-    3. 记录每轮线搜索步长 alpha
-
-    参数：
-        optimizer: 优化算法（最速下降/牛顿/修正牛顿）
-        x0: 初始点
-        objective: 目标函数对象
-        line_search: 线搜索函数
-        **kwargs: 统一透传给 optimizer
-
-    返回：
-        result: 优化结果五元组
-        values: 每轮目标函数值（包含初始值）
-        alphas: 每轮线搜索得到的步长
-    """
-
-    # values[0] 对应初始点 x0 的函数值，便于和后续迭代曲线对齐。
-    values = [objective.value(x0)]
-    alphas: List[float] = []
-
-    # 回调函数由优化器在每轮迭代结束后调用。
-    # 这里只关心 fx 和 alpha，其他参数用占位符变量忽略。
-    def callback(_: int, __: np.ndarray, fx: float, ___: float, alpha: float) -> None:
-        values.append(float(fx))
-        alphas.append(float(alpha))
-
-    result = optimizer(
-        x0,
-        objective,
-        line_search,
-        callback=callback,
-        **kwargs,
-    )
-    return result, values, alphas
-
 
 
 def run_rosenbrock_alpha_trace() -> None:
@@ -258,24 +204,18 @@ def run_rosenbrock_alpha_trace() -> None:
     methods: Dict[str, Optimizer] = {
         "Steepest": steepest_descent,
         "Newton": newton_method,
-        "ModifiedNewton": modified_newton_method,
+        "ModifiedNewton": modified_newton,
     }
 
     histories: Dict[str, List[float]] = {}
     print("\n=== Part A: Rosenbrock from x0=(1.2, 1.2) ===")
     for name, method in methods.items():
-        result, values, _ = run_with_trace(
-            method,
-            x0,
-            objective,
-            wolfe_powell_line_search,
-            grad_tol=1e-5,
-            max_outer_iter=20_000 ,
-            alpha=1.0,
-            sigma1=1e-4,
-            sigma2=0.9,
-            rho=0.5,
-            beta=0.5,
+        result, _, values, _ = run_with_trace(
+            optimizer=method,
+            x0=x0,
+            objective=objective,
+            line_search=wolfe_powell_line_search,
+            optimizer_params={"grad_tol": 1e-5, "max_outer_iter": 20_000},
         )
         histories[name] = values
 
@@ -290,18 +230,7 @@ def run_rosenbrock_alpha_trace() -> None:
             else: print(f"  iter={k:05d}, f={float(fx):.6e}")
 
     # 绘制收敛曲线
-    fig, ax = plt.subplots()
-    # 半对数坐标, 方便观察收敛曲线变化规律。
-    for name, values in histories.items():
-        ax.semilogy(values, label=name)
-    ax.set_xlabel("Iteration")
-    ax.set_ylabel("Objective value")
-    ax.set_title("Rosenbrock objective vs iteration")
-    ax.legend()
-    ax.grid(True, which="both", linestyle="--", alpha=0.5)
-    fig.tight_layout()
-    fig.savefig(_picture_dir() / "rosenbrock_curve.png", dpi=200)
-    plt.close(fig)
+    plot_convergence_curves(histories, "Rosenbrock objective vs iteration", PICTURE_DIR / "rosenbrock_curve.png")
 
 
 def run_line_search_comparison() -> None:
@@ -319,16 +248,13 @@ def run_line_search_comparison() -> None:
     methods: Dict[str, Optimizer] = {
         "Steepest": steepest_descent,
         "Newton": newton_method,
-        "ModifiedNewton": modified_newton_method,
+        "ModifiedNewton": modified_newton,
     }
 
     line_searches: Dict[str, Tuple[LineSearch, dict]] = {
         "GoldenRatio": (golden_ratio_line_search, {"ak": 0.0, "bk": 2.0, "tol": 1e-4}),
-        "Armijo": (armijo_line_search, {"alpha_init": 1.0, "sigma1": 1e-4, "rho": 0.5}),
-        "WolfePowell": (
-            wolfe_powell_line_search,
-            {"alpha": 1.0, "beta": 0.5, "sigma1": 1e-4, "sigma2": 0.9, "rho": 0.5},
-        ),
+        "Armijo": (armijo_line_search, {}),
+        "WolfePowell": (wolfe_powell_line_search, {}),
     }
 
     print("\n=== Part B: x0=(-1.2,1.0), line-search comparison ===")
@@ -368,7 +294,7 @@ def run_rastrigin_experiment() -> None:
     methods: Dict[str, Optimizer] = {
         "Steepest": steepest_descent,
         "Newton": newton_method,
-        "ModifiedNewton": modified_newton_method,
+        "ModifiedNewton": modified_newton,
     }
 
     print("\n=== Part C: Rastrigin (n=6) ===")
@@ -381,11 +307,6 @@ def run_rastrigin_experiment() -> None:
                 wolfe_powell_line_search,
                 grad_tol=1e-5,
                 max_outer_iter=20_000,
-                alpha=1.0,
-                beta=0.5,
-                sigma1=1e-4,
-                sigma2=0.9,
-                rho=0.5,
             )
             print(
                 f"{name:<15} f*={result[1]:.4e}, iters={result[2]}, "
@@ -406,7 +327,7 @@ def run_logistic_a9a(csv_path: Path) -> None:
     methods: Dict[str, Tuple[Optimizer, dict]] = {
         "Steepest": (steepest_descent, {"max_outer_iter": 2000, "grad_tol": 1e-5}),
         "Newton": (newton_method, {"max_outer_iter": 80, "grad_tol": 1e-6}),
-        "ModifiedNewton": (modified_newton_method, {"max_outer_iter": 80, "grad_tol": 1e-6}),
+        "ModifiedNewton": (modified_newton, {"max_outer_iter": 80, "grad_tol": 1e-6}),
     }
 
     print("\n=== Part D: a9a logistic regression ===")
@@ -414,17 +335,12 @@ def run_logistic_a9a(csv_path: Path) -> None:
     print("-" * 70)
     histories: Dict[str, List[float]] = {}
     for name, (method, cfg) in methods.items():
-        result, values, _ = run_with_trace(
-            method,
-            x0,
-            objective,
-            wolfe_powell_line_search,
-            alpha=1.0,
-            beta=0.5,
-            sigma1=1e-4,
-            sigma2=0.9,
-            rho=0.5,
-            **cfg,
+        result, _, values, _ = run_with_trace(
+            optimizer=method,
+            x0=x0,
+            objective=objective,
+            line_search=wolfe_powell_line_search,
+            optimizer_params=cfg,
         )
         histories[name] = values
 
@@ -434,17 +350,7 @@ def run_logistic_a9a(csv_path: Path) -> None:
         )
 
     # 画出逻辑回归目标函数随迭代次数变化（半对数）。
-    fig, ax = plt.subplots()
-    for name, values in histories.items():
-        ax.semilogy(values, label=name)
-    ax.set_xlabel("Iteration")
-    ax.set_ylabel("Objective value")
-    ax.set_title("a9a logistic regression: objective vs iteration")
-    ax.legend()
-    ax.grid(True, which="both", linestyle="--", alpha=0.5)
-    fig.tight_layout()
-    fig.savefig(_picture_dir() / "logistic_curve.png", dpi=200)
-    plt.close(fig)
+    plot_convergence_curves(histories, "a9a logistic regression: objective vs iteration", PICTURE_DIR / "logistic_curve.png")
 
 
 def main() -> None:

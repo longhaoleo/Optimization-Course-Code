@@ -86,7 +86,7 @@
 本次上机练习的两项核心任务如下：
 \begin{itemize}
   \item 实现采用 BB 步长的最速下降法，求解 Rosenbrock 函数极小化问题；
-  \item 采用 Armijo 回溯步长搜索，实现 BFGS（代码中函数名为 \texttt{bfgc}）与 FR 共轭梯度法（\texttt{fr}），求解 Powell 奇异函数。
+  \item 采用 Armijo 回溯步长搜索，实现 BFGS（代码中函数名为 \texttt{bfgs}）与 FR 共轭梯度法（\texttt{fr}），求解 Powell 奇异函数。
 \end{itemize}
 
 实验代码入口为 \texttt{work3/work3.py}，运行命令为：
@@ -136,7 +136,7 @@ d_{k+1}=-g_{k+1}+\beta_k^{\text{FR}}d_k.
 \begin{itemize}
   \item \texttt{work3/work3.py}：组织实验、绘图、输出表格；
   \item \texttt{optimization/line\_search/bb.py}：BB 步长实现；
-  \item \texttt{optimization/optimizers/BFGC.py}：BFGS 优化器实现；
+  \item \texttt{optimization/optimizers/bfgs.py}：BFGS 优化器实现；
   \item \texttt{optimization/optimizers/FR.py}：FR 共轭梯度实现。
 \end{itemize}
 
@@ -196,9 +196,9 @@ def bb_step_search(
     return float(alpha), 0
 \end{lstlisting}
 
-\textbf{代码展示 3：BFGC 与 FR 算法核心迭代}
-\begin{lstlisting}[caption={BFGC.py 中 BFGS 主迭代代码},label={lst:bfgc-impl}]
-def bfgc(
+\textbf{代码展示 3：bfgs 与 FR 算法核心迭代}
+\begin{lstlisting}[caption={bfgs.py 中 BFGS 主迭代代码},label={lst:bfgs-impl}]
+def bfgs(
     x0: np.ndarray,
     objective: Objective,
     line_search_func: LineSearch = wolfe_powell_line_search,
@@ -322,7 +322,7 @@ x_0=(3,-1,0,1)^T,\quad x^\ast=(0,0,0,0)^T.
 \midrule
 Rosenbrock & Steepest + BB & $\epsilon$, max\_iter & $10^{-6}$, $20000$ \\
 Rosenbrock & BB 步长参数 & alpha\_init, variant & $0.1$, auto \\
-Powell & BFGC + Armijo & $\epsilon$, max\_iter & $10^{-6}$, $20000$ \\
+Powell & bfgs + Armijo & $\epsilon$, max\_iter & $10^{-6}$, $20000$ \\
 Powell & FR + Armijo & $\epsilon$, max\_iter & $10^{-6}$, $20000$ \\
 Powell & Armijo 参数 & $\alpha_0$, $\sigma_1$, $\rho$ & $1.0$, $10^{-4}$, $0.5$ \\
 \bottomrule
@@ -371,7 +371,7 @@ Steepest + BB & 64 & $1.2266\times 10^{-16}$ & 是 & $1.6053\times 10^{-8}$ \\
 
 从图 \ref{fig:work3_rosen} 可以看到，BB 步长在谷底附近仍存在一定摆动，但相比固定步长最速下降法，收敛速度明显提升，能够在较少迭代内达到较高精度。
 
-\subsection{Armijo + BFGC/FR（Powell 奇异函数）}
+\subsection{Armijo + bfgs/FR（Powell 奇异函数）}
 \begin{table}[H]
 \centering
 \caption{Powell 奇异函数上的算法对比}
@@ -380,7 +380,7 @@ Steepest + BB & 64 & $1.2266\times 10^{-16}$ & 是 & $1.6053\times 10^{-8}$ \\
 \toprule
 方法 & 迭代次数 & $f^\ast$ & 是否收敛 & $\|\nabla f(x^\ast)\|$ \\
 \midrule
-BFGC + Armijo & 29 & $3.2600\times 10^{-10}$ & 是 & $7.3476\times 10^{-7}$ \\
+bfgs + Armijo & 29 & $3.2600\times 10^{-10}$ & 是 & $7.3476\times 10^{-7}$ \\
 FR + Armijo & 115 & $4.7300\times 10^{-12}$ & 是 & $6.5085\times 10^{-7}$ \\
 \bottomrule
 \end{tabular}
@@ -389,12 +389,12 @@ FR + Armijo & 115 & $4.7300\times 10^{-12}$ & 是 & $6.5085\times 10^{-7}$ \\
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.72\linewidth]{picture/work3_powell_armijo_curve}
-\caption{Powell 奇异函数上，BFGC 与 FR 在 Armijo 步长搜索下的收敛曲线。}
+\caption{Powell 奇异函数上，bfgs 与 FR 在 Armijo 步长搜索下的收敛曲线。}
 \label{fig:work3_powell_curve}
 \end{figure}
 
 由表 \ref{tab:work3_powell} 和图 \ref{fig:work3_powell_curve} 可见：
-BFGC 迭代次数更少，表现出拟牛顿法利用曲率信息的优势；
+bfgs 迭代次数更少，表现出拟牛顿法利用曲率信息的优势；
 FR 迭代次数较多，但最终函数值更低，说明在该问题上其后期下降能力也较强。
 
 \end{document}
