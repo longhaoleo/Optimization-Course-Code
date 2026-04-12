@@ -10,115 +10,29 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from optimization import Objective, armijo_line_search, fr, newton_CG
+from optimization import (
+    armijo_line_search,
+    conjugate_gradient_fr,
+    conjugate_gradient_inexact_newton,
+    extended_rosenbrock_objective,
+)
 from optimization.utils import ensure_dir, plot_convergence_curves, run_with_trace, save_csv, timed
 
 
 BENCHMARK_PAIRS = [100, 300, 500]
 EXPERIMENT_PAIRS = [1000, 10000, 30000]
+INITIAL_PAIR = np.array([-1.2, 1.0], dtype=float)
 GRAD_TOL = 1e-5
 MAX_OUTER_ITER = 200
 MAX_INNER_ITER = 100
 RESULTS_DIR = ensure_dir(_PROJECT_ROOT, "work4")
 PICTURE_DIR = ensure_dir(_PROJECT_ROOT, "work4", "picture")
+RESULTS_PATH = RESULTS_DIR / "work4_results.csv"
 
-
-def extended_rosenbrock_objective(n_pairs: int, optimized: bool = True) -> Objective:
-    """
-    扩展 Rosenbrock 函数：
-        f(x) = sum_i [(1 - x_{2i-1})^2 + 10 (x_{2i} - x_{2i-1}^2)^2]
-    """
-
-    dimension = 2 * n_pairs
-
-    if not optimized:
-        # 保留逐块循环与显式 Hessian，便于和优化后版本做耗时对比。
-
-        def func(x: np.ndarray) -> float:
-            x = np.asarray(x, dtype=float)
-            total = 0.0
-            for i in range(n_pairs):
-                a = x[2 * i]
-                b = x[2 * i + 1]
-                total += (1.0 - a) ** 2 + 10.0 * (b - a**2) ** 2
-            return float(total)
-
-        def grad(x: np.ndarray) -> np.ndarray:
-            x = np.asarray(x, dtype=float)
-            g = np.zeros_like(x)
-            for i in range(n_pairs):
-                a = x[2 * i]
-                b = x[2 * i + 1]
-                residual = b - a**2
-                g[2 * i] = -40.0 * a * residual - 2.0 * (1.0 - a)
-                g[2 * i + 1] = 20.0 * residual
-            return g
-
-        def hess(x: np.ndarray) -> np.ndarray:
-            x = np.asarray(x, dtype=float)
-            hk = np.zeros((dimension, dimension), dtype=float)
-            for i in range(n_pairs):
-                a = x[2 * i]
-                b = x[2 * i + 1]
-                hk[2 * i, 2 * i] = 120.0 * a**2 - 40.0 * b + 2.0
-                hk[2 * i, 2 * i + 1] = -40.0 * a
-                hk[2 * i + 1, 2 * i] = -40.0 * a
-                hk[2 * i + 1, 2 * i + 1] = 20.0
-            return hk
-
-        return Objective(func=func, grad=grad, hess=hess, name=f"extended_rosenbrock_naive_{n_pairs}")
-
-    # 优化实现：利用切片把奇数/偶数分量分开，避免 Python 层 for 循环。
-    def _split(x: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        x = np.asarray(x, dtype=float)
-        return x[0::2], x[1::2]
-
-    def func(x: np.ndarray) -> float:
-        odd, even = _split(x)
-        residual = even - odd**2
-        return float(np.sum((1.0 - odd) ** 2 + 10.0 * residual**2))
-
-    def grad(x: np.ndarray) -> np.ndarray:
-        odd, even = _split(x)
-        residual = even - odd**2
-        g = np.empty((dimension,), dtype=float)
-        g[0::2] = -40.0 * odd * residual - 2.0 * (1.0 - odd)
-        g[1::2] = 20.0 * residual
-        return g
-
-    def hess(x: np.ndarray) -> np.ndarray:
-        odd, even = _split(x)
-        hk = np.zeros((dimension, dimension), dtype=float)
-        indices = np.arange(0, dimension, 2)
-        cross = -40.0 * odd
-        hk[indices, indices] = 120.0 * odd**2 - 40.0 * even + 2.0
-        hk[indices, indices + 1] = cross
-        hk[indices + 1, indices] = cross
-        hk[indices + 1, indices + 1] = 20.0
-        return hk
-
-    def hess_vec(x: np.ndarray, v: np.ndarray) -> np.ndarray:
-        odd, even = _split(x)
-        v = np.asarray(v, dtype=float)
-        hv = np.empty((dimension,), dtype=float)
-        diagonal = 120.0 * odd**2 - 40.0 * even + 2.0
-        cross = -40.0 * odd
-        # Newton-CG 只需要 Hessian 与向量的乘积，用这个接口可避免构造超大 Hessian。
-        hv[0::2] = diagonal * v[0::2] + cross * v[1::2]
-        hv[1::2] = cross * v[0::2] + 20.0 * v[1::2]
-        return hv
-
-    return Objective(
-        func=func,
-        grad=grad,
-        hess=hess,
-        hess_vec=hess_vec,
-        name=f"extended_rosenbrock_{n_pairs}",
-    )
 
 def main() -> None:
     fr_params = {"grad_tol": GRAD_TOL, "max_outer_iter": MAX_OUTER_ITER}
-    ncg_params = {
+    inexact_newton_params = {
         "grad_tol": GRAD_TOL,
         "max_outer_iter": MAX_OUTER_ITER,
         "max_inner_iter": MAX_INNER_ITER,
@@ -129,20 +43,20 @@ def main() -> None:
     experiment_rows = []
     convergence_histories = {}
 
-    # 第一部分：对比 Newton-CG 在“优化前/优化后”目标函数实现上的运行时间。
+    # 第一部分：对比 Newton-CG 在优化前/优化后目标函数实现上的运行时间。
     for n_pairs in BENCHMARK_PAIRS:
-        x0 = np.tile(np.array([-1.2, 1.0], dtype=float), n_pairs)
+        x0 = np.tile(INITIAL_PAIR, n_pairs)
         for method_name, optimized in (
             ("Newton-CG before optimization", False),
             ("Newton-CG after optimization", True),
         ):
             objective = extended_rosenbrock_objective(n_pairs, optimized=optimized)
             (result, _, _, _), runtime = timed_run(
-                optimizer=newton_CG,
+                optimizer=conjugate_gradient_inexact_newton,
                 x0=x0,
                 objective=objective,
                 line_search=armijo_line_search,
-                optimizer_params=ncg_params,
+                optimizer_params=inexact_newton_params,
             )
             benchmark_rows.append(
                 {
@@ -160,11 +74,11 @@ def main() -> None:
 
     # 第二部分：在大规模问题上比较 FR 与 Newton-CG 的效率和收敛表现。
     for n_pairs in EXPERIMENT_PAIRS:
-        x0 = np.tile(np.array([-1.2, 1.0], dtype=float), n_pairs)
+        x0 = np.tile(INITIAL_PAIR, n_pairs)
         objective = extended_rosenbrock_objective(n_pairs, optimized=True)
         for method_name, optimizer, optimizer_params in (
-            ("FR + Armijo", fr, fr_params),
-            ("Newton-CG + Armijo", newton_CG, ncg_params),
+            ("FR + Armijo", conjugate_gradient_fr, fr_params),
+            ("Newton-CG + Armijo", conjugate_gradient_inexact_newton, inexact_newton_params),
         ):
             (result, _, f_trace, _), runtime = timed_run(
                 optimizer=optimizer,
@@ -194,7 +108,7 @@ def main() -> None:
         (
             benchmark_rows,
             "Newton-CG runtime before/after program optimization",
-            "work4_newton_cg_optimization_runtime.png",
+            "wnewton_cg_optimization_runtime.png",
         ),
         (
             experiment_rows,
@@ -224,7 +138,7 @@ def main() -> None:
             PICTURE_DIR / "work4_convergence_curve.png",
         )
 
-    save_csv(RESULTS_DIR / "work4_results.csv", benchmark_rows + experiment_rows)
+    save_csv(RESULTS_PATH, benchmark_rows + experiment_rows)
 
     print("Optimization benchmark (before vs after):")
     for row in benchmark_rows:
@@ -243,7 +157,7 @@ def main() -> None:
         )
 
     print(f"\nSaved figures to: {PICTURE_DIR}")
-    print(f"Saved CSV to: {RESULTS_DIR / 'work4_results.csv'}")
+    print(f"Saved CSV to: {RESULTS_PATH}")
 
 
 if __name__ == "__main__":

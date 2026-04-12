@@ -1,67 +1,24 @@
 \documentclass[12pt,a4paper]{ctexart}
-\usepackage[utf8]{inputenc}
-\usepackage{easyReview}
-\usepackage[T1]{fontenc}
 \usepackage{amsmath}
 \usepackage{fancyhdr}
-\usepackage{amsfonts}
-\usepackage{multirow}
 \usepackage{booktabs}
 \usepackage{subcaption}
 \usepackage{float}
-\usepackage{mathrsfs}
-\usepackage{bm}
-\usepackage{extarrows}
-\usepackage{wasysym}
-\usepackage{graphbox}
 \usepackage{graphicx}
-\usepackage[colorlinks,linkcolor=red,anchorcolor=blue,citecolor=green]{hyperref}
-\usepackage{cases}
-\usepackage{color}
-\usepackage{tcolorbox}
-\usepackage{listings}
-\usepackage{xcolor}
-\usepackage[framemethod=tikz]{mdframed}
 \usepackage[left=2.00cm, right=2.00cm, top=2.00cm, bottom=2.00cm]{geometry}
-
-\newcommand{\RNum}[1]{\uppercase\expandafter{\romannumeral #1\relax}}
-\newtheorem{theorem}{定理}[section]
-\newtheorem{lemma}[theorem]{Lemma}
-\newtheorem{definition}[theorem]{定义}
-\newtheorem{example}[theorem]{例}
-\newtheorem{exercise}[theorem]{\textcolor{blue} {练习}}
-\newtheorem{problem}[theorem]{问题}
-\newtheorem{property}[theorem]{性质}
-\newtheorem{proposition}[theorem]{命题}
-\newtheorem{remark}[theorem]{Remark}
-\newtheorem{algorithm}[theorem]{算法}
+\graphicspath{{./picture/}{./work4/picture/}{work4/picture/}}
 
 \pagestyle{fancy}
 \cfoot{\thepage}
 \lhead{{《最优化理论与方法》实验报告}}
 \setlength{\headheight}{14.5pt}
 
-\lstset{
-    language=Python,
-    basicstyle=\ttfamily\small,
-    keywordstyle=\color{blue!70!black},
-    commentstyle=\color{green!40!black},
-    stringstyle=\color{red!60!black},
-    numbers=left,
-    numberstyle=\tiny\color{gray},
-    stepnumber=1,
-    frame=single,
-    breaklines=true,
-    showstringspaces=false,
-    tabsize=4
-}
-
 \begin{document}
 
 \vspace*{6em}
 \begin{figure}[H]
-	\centering
-	\includegraphics[width=0.4\linewidth]{picture/HNUlogo}
+    \centering
+    \includegraphics[width=0.4\linewidth]{picture/HNUlogo}
 \end{figure}
 \vspace*{4em}
 \begin{center}
@@ -75,7 +32,7 @@
 {\bf\makebox[4em][s]{班~~~~级}}: \underline{\makebox[13em][c]{信息2301}}\\
 {\bf\makebox[4em][s]{学~~~~号}}: \underline{\makebox[13em][c]{202310040128}}\\
 {\bf\makebox[4em][s]{姓~~~~名}}: \underline{\makebox[13em][c]{雷龙浩}}\\
-{\bf\makebox[4em][s]{完成日期}}: \underline{\makebox[13em][c]{2026年04月07日}}\\
+{\bf\makebox[4em][s]{完成日期}}: \underline{\makebox[13em][c]{2026年04月12日}}\\
 }
 \end{center}
 \clearpage
@@ -83,165 +40,240 @@
 \tableofcontents
 \newpage
 
-\section{实验任务与算法说明}
-\subsection{实验任务}
-本次上机练习 4 的任务主要有三部分：
-\begin{itemize}
-  \item 实现非精确牛顿--共轭梯度法（Line Search Newton-CG）；
-  \item 求解扩展 Rosenbrock 问题
-  \[
-  \min f(x)=\sum_{i=1}^{n}\left[(1-x_{2i-1})^2+10(x_{2i}-x_{2i-1}^2)^2\right],
-  \]
-  并取较大的规模 \(n=1000,10000,30000\)；
-  \item 记录程序优化前后的运行时间，并比较所选传统算法与 Newton-CG 的效果。
-\end{itemize}
-
-和前几次作业相比，这次实验更强调“大规模”这一点。
-前几次做二维或低维问题时，很多实现细节对时间的影响还不算特别明显；
-但这次 \(n\) 取到 \(1000,10000,30000\)，对应的变量维数分别达到 \(2000,20000,60000\)，
-这时程序写法是否合理，就会直接影响算法能不能高效跑完。
-
-\subsection{为什么选择 FR 与 Newton-CG 做比较}
-从前几次作业的实验结果看，最速下降法虽然简单，但在病态问题上往往需要很多步；
-标准牛顿法虽然收敛快，但它依赖完整 Hessian，在大规模问题上代价比较高。
-
-所以这次我选择：
-\begin{itemize}
-  \item 用 \texttt{FR + Armijo} 作为一阶方法代表；
-  \item 用 \texttt{Newton-CG + Armijo} 作为二阶方法代表。
-\end{itemize}
-
-这样比较的好处是比较自然。
-FR 方法只依赖梯度信息，是典型的一阶大规模优化方法；
-Newton-CG 则既利用了二阶信息，又避免了直接求解完整牛顿方程，更能体现“大规模二阶方法”的特点。
-
-\subsection{Newton-CG 方法简述}
-Newton-CG 的核心仍然是求解牛顿方向
+\section{问题背景与算法原理}
+\subsection{扩展 Rosenbrock 问题}
+本次实验考虑的目标函数为
 \[
-\nabla^2 f(x_k)d_k=-\nabla f(x_k),
+f(x)=\sum_{i=1}^{n}\left[(1-x_{2i-1})^2+10(x_{2i}-x_{2i-1}^2)^2\right].
 \]
-但这里不是直接构造并求解完整线性方程组，而是利用共轭梯度法在内层近似求解。
-可以把它理解成“两层循环”：
-\begin{itemize}
-  \item 外层负责更新迭代点 \(x_k\)；
-  \item 内层负责近似求当前位置的牛顿方向 \(d_k\)。
-\end{itemize}
+它可以看成经典 Rosenbrock 函数在高维下的成组扩展。
+每一对变量 \((x_{2i-1},x_{2i})\) 都形成一个弯曲的谷底结构，因此这个问题常被用来测试优化算法在病态情形下的表现。
 
-这样做的直观理解是：牛顿法的方向很好，但“大矩阵直接求解”太贵，于是改成“方向仍然按牛顿思想求，但内层只近似算到够用为止”。
-
-在第 \(k\) 轮外迭代中，记
+该问题的最优解为
 \[
-r_0=\nabla f(x_k),\qquad p_0=-r_0,\qquad d_0=0,
+x^\ast=(1,1,\dots,1)^T,
 \]
-然后在内层做 CG 迭代：
-\[
-\alpha_j=\frac{r_j^Tr_j}{p_j^TAp_j},\qquad d_{j+1}=d_j+\alpha_jp_j,\qquad r_{j+1}=r_j+\alpha_jAp_j,
-\]
-其中 \(A=\nabla^2 f(x_k)\)。
-若出现负曲率 \(p_j^TAp_j\le 0\)，则算法退回到当前可用方向；若残差满足容差条件，则提前结束内层迭代。
+对应最优函数值 \(f(x^\ast)=0\)。
 
-外层更新采用 Armijo 回溯线搜索：
+\subsection{梯度、Hessian 及其结构}
+记
 \[
-x_{k+1}=x_k+\alpha_kd_k.
+\phi_i(a,b)=(1-a)^2+10(b-a^2)^2,
+\]
+则第 \(i\) 对变量对应的梯度为
+\[
+\nabla \phi_i(a,b)=
+\begin{pmatrix}
+-40a(b-a^2)-2(1-a)\\
+20(b-a^2)
+\end{pmatrix}.
 \]
 
-这里的“非精确”很重要。
-它的意思不是方向算错了，而是说内层 CG 不必每次都解得特别精确，只要已经足够作为下降方向，就可以停止。
-这样每轮的工作量会小很多，整体上更适合大规模问题。
+对应的 Hessian 小块为
+\[
+\nabla^2 \phi_i(a,b)=
+\begin{pmatrix}
+120a^2-40b+2 & -40a\\
+-40a & 20
+\end{pmatrix}.
+\]
 
-\subsection{程序优化思路}
-本次作业中真正决定性能的，不是外层循环本身，而是每轮迭代中目标函数、梯度以及 Hessian 相关运算的实现方式。主要做了三点优化：
-\begin{itemize}
-  \item 将扩展 Rosenbrock 的函数值与梯度从 Python 层 \texttt{for} 循环改写为 NumPy 切片向量化形式；
-  \item 为目标函数增加 Hessian-向量积接口 \texttt{hess\_vec}，使 Newton-CG 可以直接计算 \(\nabla^2 f(x_k)v\)，避免构造巨大的稠密 Hessian；
-  \item 将结果记录、CSV 输出与收敛曲线绘制整理到公共工具函数中，减少实验脚本中的重复逻辑。
-\end{itemize}
+于是扩展 Rosenbrock 的整体 Hessian 具有按 \(2\times 2\) 小块排列的结构。
+它不是任意稠密矩阵；但如果程序里直接用一个 \(2n\times 2n\) 的 NumPy 二维数组去构造完整 Hessian，
+在大规模时会带来很大的内存与时间开销。
 
-我认为其中第二点最关键。对于 \(n=30000\) 时，变量维数为 \(2n=60000\)。
-若显式构造完整 Hessian，则矩阵规模约为 \(60000\times60000\)，按双精度浮点数估算，内存占用约为
+以 \(n=30000\) 为例，变量维数是 \(2n=60000\)。
+若按稠密矩阵形式显式存储一个 \(60000\times 60000\) 的 Hessian，
+其双精度内存需求约为
 \[
 60000^2\times 8\ \text{Byte}\approx 28.8\ \text{GB},
 \]
-这对于普通实验环境几乎不可接受。
-而 Hessian-向量积只需要线性规模的存储和运算，因此更适合 Newton-CG。
+这在普通实验环境中已经非常不现实。
 
-这也说明一个问题：在大规模优化里，并不是所有二阶信息都要完整写出来，
-很多时候只要给算法提供“它真正要用到的那部分信息”就够了。
-
-\section{程序结构与关键实现}
-\subsection{代码结构}
-本次实验的主要文件如下：
+\subsection{为什么选 FR 做对比}
+为了体现不同算法思想在大规模问题上的差异，我在主实验中选取了两类方法做比较：
 \begin{itemize}
-  \item \texttt{work4/work4.py}：实验入口、扩展 Rosenbrock 目标函数、计时与结果绘图；
-  \item \texttt{optimization/optimizers/newton\_CG.py}：Newton-CG 主算法与内层 CG 方向求解；
-  \item \texttt{optimization/utils.py}：目录创建、结果跟踪、收敛曲线绘图与 CSV 输出。
+  \item \texttt{FR + Armijo}：代表一阶非线性共轭梯度法；
+  \item \texttt{Newton-CG + Armijo}：代表利用二阶信息的非精确牛顿法。
 \end{itemize}
 
-在项目根目录执行
-\begin{quote}
-\texttt{python work4/work4.py}
-\end{quote}
-即可自动完成实验，并在 \texttt{work4/picture/} 下生成图片，在 \texttt{work4/work4\_results.csv} 中保存数值结果。
-整体结构和前几次作业保持一致，这样后面整理图片、表格和结果会更方便。
+之所以这样选，是因为这两类方法都比较经典，而且各自代表性很强。
+FR 方法只用梯度信息，单步开销相对较低；
+Newton-CG 则试图利用局部曲率信息，但又避免直接求解完整牛顿方程。
+把这两种方法放在一起比较，能比较清楚地比较\textbf{大规模一阶方法}和\textbf{大规模二阶方法}的差别。
 
-\subsection{关键代码 1：扩展 Rosenbrock 与实验主流程}
-\lstinputlisting[
-    firstline=17,
-    lastline=226,
-    caption={work4.py 中扩展 Rosenbrock 定义与主实验流程},
-    label={lst:work4-main}
-]{work4.py}
+\subsection{FR 共轭梯度法简述}
+非线性共轭梯度法的基本思路，是在每一轮用当前梯度和上一轮方向共同构造新的搜索方向：
+\[
+d_0=-g_0,\qquad d_k=-g_k+\beta_k d_{k-1}.
+\]
+其中 Fletcher--Reeves 公式取
+\[
+\beta_k^{FR}=\frac{g_k^T g_k}{g_{k-1}^T g_{k-1}}.
+\]
 
-\subsection{关键代码 2：Newton-CG 核心实现}
-\lstinputlisting[
-    firstline=13,
-    lastline=136,
-    caption={newton\_CG.py 中内层 CG 与外层 Newton-CG 主迭代},
-    label={lst:newton-cg}
-]{../optimization/optimizers/newton_CG.py}
+这种方法的直观理解是：它比最速下降法多记住了一点 上一步 的信息，
+因此通常不会像最速下降法那样频繁地来回摆动。
+不过它本质上仍然属于一阶方法，对曲率的利用有限，所以在病态问题上迭代次数可能会比较多。
+
+\subsection{非精确牛顿法与内层共轭梯度}
+标准牛顿法需要求解
+\[
+\nabla^2 f(x_k) d_k = - \nabla f(x_k),
+\]
+然后再用 \(d_k\) 作为搜索方向。
+问题在于，大规模情况下既不适合显式构造完整 Hessian，也不适合每轮都精确求解这个线性方程组。
+
+非精确牛顿法的思路是：\textbf{方向仍然按牛顿思想求，但不要求每轮都精确解到非常高的精度。}
+在本次实验中，我采用内层共轭梯度法来近似求解牛顿方程，也就是常说的 Newton-CG。
+
+算法可以理解成两层循环：
+\begin{itemize}
+  \item 外层：计算梯度，判断终止条件，做线搜索并更新迭代点；
+  \item 内层：用共轭梯度法近似求解当前点的牛顿方向。
+\end{itemize}
+
+在第 \(k\) 次外迭代中，记
+\[
+g_k=\nabla f(x_k), \qquad A_k=\nabla^2 f(x_k),
+\]
+内层 CG 从
+\[
+r_0=g_k,\qquad p_0=-r_0,\qquad d_0=0
+\]
+开始迭代，并按
+\[
+\alpha_j=\frac{r_j^T r_j}{p_j^T A_k p_j}, \qquad
+d_{j+1}=d_j+\alpha_j p_j, \qquad
+r_{j+1}=r_j+\alpha_j A_k p_j
+\]
+更新。
+
+若出现负曲率，即
+\[
+p_j^T A_k p_j \le 0,
+\]
+则说明当前局部曲率不再适合继续按标准 CG 方式推进，此时算法退回到已得到的可用方向。
+若残差满足容差条件，则提前结束内层迭代。
+
+外层更新使用 Armijo 回溯线搜索：
+\[
+x_{k+1}=x_k+\alpha_k d_k.
+\]
+
+
+
+\subsection{为什么要Hessian-向量积}
+对于本题中的每一对变量，若向量 \(v\) 的对应小块写为
+\[
+v_i=
+\begin{pmatrix}
+v_{2i-1}\\
+v_{2i}
+\end{pmatrix},
+\]
+则有
+\[
+\nabla^2 \phi_i(a,b)\, v_i=
+\begin{pmatrix}
+(120a^2-40b+2)v_{2i-1}-40a\,v_{2i}\\
+-40a\,v_{2i-1}+20v_{2i}
+\end{pmatrix}.
+\]
+
+这说明如果算法只需要 \(H(x)v\)，那么并不一定要先把完整 Hessian 建出来。
+只要按分块公式直接算乘积就可以了。
+
+在我的实现里，优化版目标函数提供了 \texttt{hess\_vec} 接口。
+这样 \texttt{conjugate\_gradient\_inexact\_newton} 在内层 CG 中就可以直接调用 Hessian-向量积，
+从而把内存和运算都压到更合理的水平。
+
+\section{程序实现说明}
+\subsection{实验流程}
+\texttt{work4.py} 的流程比较直接，就是先做“程序优化前后对比”，再做“FR 与 Newton-CG 的算法比较”。
+前一部分固定算法，只改变目标函数实现方式，用来观察向量化和 Hessian-向量积对运行时间的影响；
+后一部分固定为优化后的目标函数实现，再比较一阶方法和二阶方法的效果。
+
+程序统一记录运行时间、迭代次数、最终函数值、是否收敛和梯度范数，
+并把结果保存成表格，同时画出运行时间曲线和收敛曲线。
+
+\subsection{实现要点}
+在 \texttt{optimization/problems.py} 的 \texttt{extended\_rosenbrock\_objective} 中，我保留了两种版本：
+\begin{itemize}
+  \item \texttt{optimized=False}：使用 Python 层 \texttt{for} 循环，并显式构造 Hessian；
+  \item \texttt{optimized=True}：使用 NumPy 切片向量化，并提供 \texttt{hess\_vec}。
+\end{itemize}
+
+前者更接近“直接把数学公式逐项翻译成代码”的写法，便于理解；
+后者则更接近真正适合大规模数值实验的写法。
+
+\subsection{实验参数}
+本次实验采用如下参数设置：
+\begin{itemize}
+  \item 初始点统一取重复的 \((-1.2,1.0)\)；
+  \item 外层终止阈值为 \(\|\nabla f(x_k)\|<10^{-5}\)；
+  \item 最大外层迭代次数设为 \(200\)；
+  \item Newton-CG 的最大内层迭代次数设为 \(100\)；
+  \item 线搜索统一采用 Armijo 回溯线搜索。
+\end{itemize}
+
+这样设置的原因比较直接：一方面它和课上常见实验设置一致，便于比较；
+另一方面这些参数已经足够让算法在本题上稳定收敛，不需要再做太复杂的调参。
+
+具体代码主要集中在 \texttt{optimization/problems.py}、\texttt{work4/work4.py} 和
+\texttt{optimization/optimizers/conjugate\_gradient\_inexact\_newton.py} 中。
+这里不再大段展示源码，只结合实验结果讨论实现思路和效果。
 
 \section{实验结果与分析}
-\subsection{程序优化前后运行时间比较}
-为了突出程序实现方式带来的时间差异，先固定使用 Newton-CG，只比较扩展 Rosenbrock 在“朴素实现”和“优化实现”下的运行时间。
-实验结果如表 \ref{tab:benchmark} 所示。
+\subsection{程序优化前后时间对比}
+为了只观察实现优化的影响，我先固定算法为 Newton-CG，
+然后比较扩展 Rosenbrock 在朴素实现和优化实现下的运行时间。
+结果如表 \ref{tab:benchmark} 所示。
 
 \begin{table}[H]
 \centering
-\caption{Newton-CG 在程序优化前后运行时间对比}
+\caption{Newton-CG 在程序优化前后的运行时间对比}
 \label{tab:benchmark}
 \begin{tabular}{cccccc}
 \toprule
 \(n\) & 维数 \(2n\) & 实现方式 & 运行时间/s & 迭代次数 & 加速比 \\
 \midrule
-100 & 200 & 优化前 & 0.00639 & 19 & \multirow{2}{*}{6.08} \\
-100 & 200 & 优化后 & 0.00105 & 19 & \\
+100 & 200 & 优化前 & 0.02738 & 19 & 2.90 \\
+100 & 200 & 优化后 & 0.00944 & 19 & 2.90 \\
 \midrule
-300 & 600 & 优化前 & 0.02617 & 18 & \multirow{2}{*}{19.82} \\
-300 & 600 & 优化后 & 0.00132 & 18 & \\
+300 & 600 & 优化前 & 0.10302 & 18 & 18.40 \\
+300 & 600 & 优化后 & 0.00560 & 18 & 18.40 \\
 \midrule
-500 & 1000 & 优化前 & 0.12312 & 18 & \multirow{2}{*}{66.73} \\
-500 & 1000 & 优化后 & 0.00184 & 18 & \\
+500 & 1000 & 优化前 & 0.91814 & 18 & 42.53 \\
+500 & 1000 & 优化后 & 0.02159 & 18 & 42.53 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.72\linewidth]{picture/work4_newton_cg_optimization_runtime.png}
+\includegraphics[width=0.72\linewidth]{work4_newton_cg_optimization_runtime.png}
 \caption{Newton-CG 在程序优化前后的运行时间曲线}
-\label{fig:work4_opt_runtime}
+\label{fig:work4-opt-runtime}
 \end{figure}
 
-由表 \ref{tab:benchmark} 和图 \ref{fig:work4_opt_runtime} 可以看出，随着规模增大，优化前后时间差快速拉大。
-在 \(n=500\) 时，优化后版本已经达到约 \(66.7\) 倍的速度提升。
-这说明：对于大规模无约束优化问题，目标函数和梯度的实现方式本身就是算法效率的重要组成部分，不能只关注迭代次数。
+从表 \ref{tab:benchmark} 可以先看到一个非常明确的现象：\textbf{优化前后迭代次数完全相同，但运行时间差异很大。}
+这说明本次程序优化并没有改变算法路径，也没有改变收敛结果，
+它提升的纯粹是每一步计算的执行效率。
 
-这里我觉得很有意思的一点是：数学问题并没有变，算法主体也没有变，变化的只是代码实现方式。
-但即使如此，时间仍然出现了数量级上的改善。
-这说明在数值优化实验中，“程序优化”并不是附属工作，而是实验结论的重要组成部分。
+进一步看加速比：
+\begin{itemize}
+  \item 当 \(n=100\) 时，加速比约为 \(2.90\)；
+  \item 当 \(n=300\) 时，加速比约为 \(18.40\)；
+  \item 当 \(n=500\) 时，加速比约为 \(42.53\)。
+\end{itemize}
 
-\subsection{FR 与 Newton-CG 的实验比较}
-接着在优化后的目标函数实现上，比较 \texttt{FR + Armijo} 与 \texttt{Newton-CG + Armijo} 两种算法。
+随着规模增大，加速效果越来越明显。
+向量化实现和 Hessian-向量积更多利用了 NumPy 的底层批量计算能力，因此规模越大越占优势。
+
+
+\subsection{FR 与 Newton-CG 的比较}
+在完成程序优化后，我再用优化版目标函数对 FR 和 Newton-CG 做主实验比较。
 结果如表 \ref{tab:maincompare} 所示。
 
 \begin{table}[H]
@@ -252,14 +284,14 @@ x_{k+1}=x_k+\alpha_kd_k.
 \toprule
 \(n\) & 方法 & 运行时间/s & 迭代次数 & \(f^\ast\) & 是否收敛 & \(\|\nabla f(x^\ast)\|\) \\
 \midrule
-1000 & FR + Armijo & 0.00695 & 55 & \(4.70\times 10^{-11}\) & 是 & \(6.32\times 10^{-6}\) \\
-1000 & Newton-CG + Armijo & 0.00174 & 19 & \(2.12\times 10^{-17}\) & 是 & \(6.09\times 10^{-8}\) \\
+1000 & FR + Armijo & 0.04522 & 55 & \(4.70\times 10^{-11}\) & 是 & \(6.32\times 10^{-6}\) \\
+1000 & Newton-CG + Armijo & 0.02697 & 19 & \(2.12\times 10^{-17}\) & 是 & \(6.09\times 10^{-8}\) \\
 \midrule
-10000 & FR + Armijo & 0.92845 & 158 & \(1.16\times 10^{-10}\) & 是 & \(9.58\times 10^{-6}\) \\
-10000 & Newton-CG + Armijo & 0.01550 & 19 & \(2.12\times 10^{-16}\) & 是 & \(1.93\times 10^{-7}\) \\
+10000 & FR + Armijo & 3.49834 & 158 & \(1.16\times 10^{-10}\) & 是 & \(9.58\times 10^{-6}\) \\
+10000 & Newton-CG + Armijo & 0.08689 & 19 & \(2.12\times 10^{-16}\) & 是 & \(1.93\times 10^{-7}\) \\
 \midrule
-30000 & FR + Armijo & 0.91342 & 184 & \(6.63\times 10^{-12}\) & 是 & \(2.78\times 10^{-6}\) \\
-30000 & Newton-CG + Armijo & 0.08978 & 19 & \(6.36\times 10^{-16}\) & 是 & \(3.34\times 10^{-7}\) \\
+30000 & FR + Armijo & 3.87942 & 184 & \(6.63\times 10^{-12}\) & 是 & \(2.78\times 10^{-6}\) \\
+30000 & Newton-CG + Armijo & 0.27949 & 19 & \(6.36\times 10^{-16}\) & 是 & \(3.34\times 10^{-7}\) \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -268,60 +300,52 @@ x_{k+1}=x_k+\alpha_kd_k.
 \centering
 \begin{subfigure}{0.49\linewidth}
   \centering
-  \includegraphics[width=\linewidth]{picture/work4_method_runtime_compare.png}
+  \includegraphics[width=\linewidth]{work4_method_runtime_compare.png}
   \caption{运行时间比较}
 \end{subfigure}
 \hfill
 \begin{subfigure}{0.49\linewidth}
   \centering
-  \includegraphics[width=\linewidth]{picture/work4_convergence_curve.png}
+  \includegraphics[width=\linewidth]{work4_convergence_curve.png}
   \caption{收敛曲线（\(n=1000\)）}
 \end{subfigure}
 \caption{FR 与 Newton-CG 的效率与收敛过程比较}
-\label{fig:work4_compare}
+\label{fig:maincompare}
 \end{figure}
 
-从表 \ref{tab:maincompare} 和图 \ref{fig:work4_compare} 可以得到以下结论：
+从表 \ref{tab:maincompare} 可以得到几个比较清楚的结论。
+
+\subsubsection*{1. 两种方法都能收敛，但 Newton-CG 收敛更快}
+在三个规模下，两种算法都达到了收敛要求。
+FR 作为一阶方法，虽然速度不一定快，但在这个问题上仍然是有效的。
+
+不过从外层迭代次数看，Newton-CG 始终稳定在 \(19\) 次左右，而 FR 分别需要 \(55\)、\(158\)、\(184\) 次。
+可以看出 Newton-CG 对曲率的利用更充分，能更快找到合适的下降方向。
+
+\subsubsection*{2. Newton-CG 的时间优势在大规模下更明显}
+把 FR 与 Newton-CG 的运行时间相除，可得到大致的时间加速比：
 \begin{itemize}
-  \item 在三个规模下，Newton-CG 都明显快于 FR。对应的时间加速比分别约为 \(4.00\)、\(59.88\) 和 \(10.17\)；
-  \item Newton-CG 的外层迭代次数几乎保持在 19 次左右，说明二阶信息显著改善了收敛速度，并且这种优势在高维问题中依然稳定；
-  \item FR 也能收敛，但随着规模增大，迭代次数明显上升，且达到的梯度范数精度整体弱于 Newton-CG；
-  \item 从 \(n=1000\) 的收敛曲线看，Newton-CG 的函数值下降更加陡峭，前若干步就能迅速进入高精度区域。
+  \item \(n=1000\) 时约为 \(1.68\)；
+  \item \(n=10000\) 时约为 \(40.26\)；
+  \item \(n=30000\) 时约为 \(13.88\)。
 \end{itemize}
 
-我觉得这里最值得注意的是第二点。
-FR 的迭代次数会随着问题规模增大而明显上升，而 Newton-CG 的外层迭代次数基本稳定在 19 次左右，
-这说明 Newton-CG 对目标函数曲率的利用更加充分。
-可以简单理解成：FR 更像是在“顺着梯度往下走”，而 Newton-CG 则是在每一步里都尽量结合局部二阶信息来修正方向，所以总步数更少。
+也就是说，在中大规模下，Newton-CG 比 FR 快了接近一个数量级。
 
-\subsection{结果讨论}
-这里有一个值得注意的现象：对于 \(n=30000\)，FR 的总时间与 \(n=10000\) 相比没有线性增长，而 Newton-CG 的时间也出现了不完全单调的变化。
-这主要与运行时环境、NumPy 底层调度以及不同规模下缓存命中情况有关。
-因此，在分析时间结果时，更适合关注总体量级差异和算法趋势，而不必把单次运行视作严格的理论比例。
-
-总体来看，本次实验有两个层面的结论：
+\subsubsection*{3. Newton-CG 最终精度也更高}
+从最终函数值和梯度范数看，Newton-CG 的结果普遍更好。
+例如：
 \begin{itemize}
-  \item \textbf{程序层面：} 向量化与 Hessian-向量积显著提升了大规模优化问题的实现效率；
-  \item \textbf{算法层面：} 相比一阶共轭梯度法，Newton-CG 能更充分利用曲率信息，在扩展 Rosenbrock 这类病态问题上表现更好。
+  \item 在 \(n=10000\) 时，FR 的最终梯度范数约为 \(9.58\times 10^{-6}\)，已经接近停止阈值；
+  \item 同样规模下，Newton-CG 的最终梯度范数约为 \(1.93\times 10^{-7}\)，明显更小。
 \end{itemize}
 
-\section{实验心得}
-通过本次实验，我对“算法设计”和“程序实现”之间的关系有了更直观的理解。
-前几次作业更多是在固定问题上比较不同下降法，而这次作业进一步说明：当问题规模增大以后，单纯把数学公式翻译成代码远远不够，必须关注数据结构、向量化方式以及是否真的需要构造完整矩阵。
+这说明二阶信息不仅减少了迭代次数，也让算法更容易进入高精度区域。
 
-另外，Newton-CG 这一类算法也体现出一个很重要的思想：并不是所有二阶方法都必须显式求解完整牛顿方程。
-只要能够高效计算 Hessian-向量积，就可以在保留二阶收敛优势的同时，把存储与计算成本控制在较低水平。
-这对今后理解大规模机器学习与科学计算中的优化算法也很有帮助。
+\subsubsection*{4. 收敛曲线更能直观看出差异}
+从图 \ref{fig:maincompare} 中 \(n=1000\) 的收敛曲线可以看到，
+Newton-CG 的目标函数值下降得更陡，前十几步内就快速逼近最优值；
+而 FR 的下降过程相对更慢。
 
-从写代码的角度来说，这次作业也让我体会到一个比较实际的问题：
-有时候算法本身并不算特别难，难的是把它写成“既能跑、又跑得快、结构还尽量清楚”的程序。
-比如这次如果只是为了把 Newton-CG 写出来，其实还不算太复杂；
-但一旦真的放到大规模问题上实验，就必须认真处理目标函数实现、公共工具、结果保存和绘图这些细节。
-
-总的来说，我认为这次实验最大的收获有两点：
-\begin{itemize}
-  \item 第一，理解了 Newton-CG 为什么适合大规模无约束优化；
-  \item 第二，意识到数值优化实验里“代码实现质量”和“算法思想”同样重要。
-\end{itemize}
 
 \end{document}
